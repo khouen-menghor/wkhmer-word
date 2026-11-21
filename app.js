@@ -200,17 +200,66 @@ addEventListener('popstate',async()=>{if(document.querySelector('dialog[open]'))
 const IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 const MOB=IOS||/Android/.test(navigator.userAgent);
 const loadJs=s=>(window.__l=window.__l||{})[s]||(window.__l[s]=new Promise((r,j)=>{const e=document.createElement('script');e.src=s;e.onload=r;e.onerror=j;document.head.append(e)}));
+let pdfFontCss;
+async function embeddedPdfFontCss(families){
+ try{
+  if(!pdfFontCss)pdfFontCss=await (await fetch('fonts.css')).text();
+  let css=pdfFontCss;
+  const blocks=css.match(/@font-face\{[^}]+\}/g)||[];
+  css=blocks.filter(b=>families.some(f=>b.includes('"'+f+'"'))).join('\n');
+  if(!css)css=pdfFontCss;
+  const urls=[...css.matchAll(/url\(([^)]+)\)/g)].map(m=>m[1].replace(/^['"]|['"]$/g,''));
+  await Promise.all([...new Set(urls)].map(async u=>{
+   try{
+    const b=await (await fetch(u)).arrayBuffer();
+    let binary='';
+    const bytes=new Uint8Array(b);
+    for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+    css=css.split('url('+u+')').join('url(data:font/woff2;base64,'+btoa(binary)+')');
+   }catch{}
+  }));
+  return css;
+ }catch{return ''}
+}
+async function svgPdfPage(host,d,k,per,families){
+ const source=P.cloneNode(true);
+ source.contentEditable='false';source.spellcheck=false;source.lang='km';source.dir='ltr';
+ const copyStyle=(sourceNode,targetNode)=>{
+  const cs=getComputedStyle(sourceNode),properties=['position','left','top','width','height','min-height','font-family','font-size','font-style','font-weight','line-height','text-align','color','background','background-color','padding','padding-top','padding-right','padding-bottom','padding-left','margin','margin-top','margin-right','margin-bottom','margin-left','border','border-collapse','border-spacing','text-decoration','text-decoration-line','vertical-align','transform','display','overflow'];
+  properties.forEach(p=>targetNode.style.setProperty(p,cs.getPropertyValue(p)));
+ };
+ copyStyle(P,source);
+ source.style.position='absolute';source.style.left='0';source.style.top=(-k*per)+'px';source.style.transform='none';source.style.textRendering='optimizeLegibility';source.style.fontKerning='normal';source.style.fontVariantLigatures='common-ligatures contextual';
+ const sources=[...P.querySelectorAll('*')],targets=[...source.querySelectorAll('*')];
+ sources.forEach((el,i)=>{if(targets[i])copyStyle(el,targets[i])});
+ source.querySelectorAll('*').forEach(el=>{el.style.textRendering='optimizeLegibility';el.style.fontKerning='normal';el.style.fontVariantLigatures='common-ligatures contextual';el.style.fontFeatureSettings='"liga" 1,"clig" 1,"ccmp" 1,"kern" 1'});
+ const css=await embeddedPdfFontCss(families);
+ source.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
+ const markup=new XMLSerializer().serializeToString(source);
+ const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+d.pw+'" height="'+d.ph+'" viewBox="0 0 '+d.pw+' '+d.ph+'"><foreignObject width="'+d.pw+'" height="'+d.ph+'"><div xmlns="http://www.w3.org/1999/xhtml" style="width:'+d.pw+'px;height:'+d.ph+'px;overflow:hidden;background:#fff"><style>'+css+'</style>'+markup+'</div></foreignObject></svg>';
+ const blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'}),url=URL.createObjectURL(blob),img=new Image();
+ await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+ const scale=3,canvas=document.createElement('canvas');canvas.width=Math.round(d.pw*scale);canvas.height=Math.round(d.ph*scale);
+ const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas is unavailable');
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);URL.revokeObjectURL(url);
+ return canvas;
+}
 async function pdfImg(){toast('កំពុងបង្កើត PDF...');try{await Promise.all([loadJs('vendor/html2canvas.min.js'),loadJs('vendor/jspdf.umd.min.js'),document.fonts.ready]);
  const d=dims(),per=d.ph+GAP,n=Math.max(1,Math.round((P.offsetHeight+GAP)/per)),o=d.l?'l':'p',pdf=new window.jspdf.jsPDF({orientation:o,unit:'pt',format:'a4',compress:true}),W=pdf.internal.pageSize.getWidth(),H=pdf.internal.pageSize.getHeight();
  const fonts=new Set();
  [P,...P.querySelectorAll('*')].forEach(el=>{const s=getComputedStyle(el),family=s.fontFamily.split(',')[0].replace(/["']/g,'').trim(),weight=s.fontWeight;if(family)fonts.add((weight||'400')+' 16px "'+family+'"')});
  await Promise.all([...fonts].map(req=>document.fonts.load(req,P.textContent).catch(()=>{})));
+ const families=[...new Set([P,...P.querySelectorAll('*')].map(el=>getComputedStyle(el).fontFamily.split(',')[0].replace(/["']/g,'').trim()).filter(Boolean))];
  for(let k=0;k<n;k++){const host=document.createElement('div');host.style.cssText='position:fixed;left:0;top:0;z-index:5;pointer-events:none;width:'+d.pw+'px;height:'+d.ph+'px;overflow:hidden;background:#fff';
-  const cl=P.cloneNode(true);cl.contentEditable='false';cl.spellcheck=false;cl.style.cssText+=';transform:none;position:absolute;left:0;top:'+(-k*per)+'px';host.append(cl);document.body.append(host);
-  cl.lang='km';cl.dir='ltr';cl.style.textRendering='optimizeLegibility';cl.style.webkitTextSizeAdjust='100%';cl.style.fontKerning='normal';cl.style.fontVariantLigatures='common-ligatures contextual';cl.style.fontFeatureSettings='"liga" 1,"clig" 1,"ccmp" 1,"kern" 1';
-  cl.querySelectorAll('*').forEach(el=>{el.style.textRendering='optimizeLegibility';el.style.webkitTextSizeAdjust='100%';el.style.fontKerning='normal';el.style.fontVariantLigatures='common-ligatures contextual';el.style.fontFeatureSettings='"liga" 1,"clig" 1,"ccmp" 1,"kern" 1'});
-  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-  const c=await html2canvas(host,{scale:IOS?3:2,backgroundColor:'#fff',logging:false,useCORS:true,scrollX:0,scrollY:0,windowWidth:d.pw,windowHeight:d.ph,onclone(doc){const root=doc.body.querySelector('#page');if(root){root.lang='km';root.dir='ltr'}}});host.remove();
+  let c;
+  if(IOS){
+   c=await svgPdfPage(host,d,k,per,families);
+  }else{
+   const cl=P.cloneNode(true);cl.contentEditable='false';cl.spellcheck=false;cl.style.cssText+=';transform:none;position:absolute;left:0;top:'+(-k*per)+'px';host.append(cl);document.body.append(host);
+   await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+   c=await html2canvas(host,{scale:2,backgroundColor:'#fff',logging:false,useCORS:true,scrollX:0,scrollY:0,windowWidth:d.pw,windowHeight:d.ph});
+  }
+  host.remove();
   if(k)pdf.addPage('a4',o);pdf.addImage(c.toDataURL('image/png'),'PNG',0,0,W,H);c.width=c.height=0}
  await readyFile(pdf.output('blob'),fname()+'.pdf','PDF')}catch(e){info('មិនអាចបង្កើត PDF បានទេ',e.message)}}
 async function readyFile(blob,name,kind){const f=new File([blob],name,{type:blob.type});
