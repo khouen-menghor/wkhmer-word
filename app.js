@@ -152,7 +152,16 @@ async function mkDocx(){const D=window.docx,p=pageOf(),l=p.or=='l';
  const doc=new D.Document({numbering:{config:[{reference:'num',levels:[{level:0,format:'decimal',text:'%1.',alignment:'left'}]}]},sections:[{properties:{page:{size:{width:11906,height:16838,orientation:l?D.PageOrientation.LANDSCAPE:D.PageOrientation.PORTRAIT},margin:{top:mm(p.mt),bottom:mm(p.mb),left:mm(p.ml),right:mm(p.mr)}}},footers:foot,children:blocks(P,D)}]});
  return D.Packer.toBlob(doc)}
 async function expDocx(){try{await save();const b=await mkDocx();closeAll();MOB?await readyFile(b,fname()+'.docx','Word'):(dl(b,fname()+'.docx'),toast('ទាញយក Word បានជោគជ័យ ✓'))}catch(e){info('មិនអាចទាញយក Word បានទេ',e.message)}}
-async function expPdf(){closeAll();await save();if(MOB)return pdfImg();await document.fonts.ready;document.title=fname();setTimeout(()=>print(),200)}
+async function expPdf(){closeAll();await save();await document.fonts.ready;
+ if(IOS){
+  P.lang='km';P.dir='ltr';P.style.textRendering='optimizeLegibility';P.style.fontKerning='normal';P.style.fontVariantLigatures='common-ligatures contextual';
+  P.querySelectorAll('*').forEach(el=>{el.lang='km';el.dir='ltr';el.style.textRendering='optimizeLegibility';el.style.fontKerning='normal';el.style.fontVariantLigatures='common-ligatures contextual'});
+  document.title=fname();
+  setTimeout(()=>{try{window.print()}catch(e){info('មិនអាចបង្កើត PDF បានទេ','Safari មិនអាចបើក Print Preview បានទេ។ សូមព្យាយាមម្តងទៀត។')}},200);
+  return;
+ }
+ if(MOB)return pdfImg();
+ document.title=fname();setTimeout(()=>print(),200)}
 function dl(b,n){const a=document.createElement('a'),url=URL.createObjectURL(b);a.href=url;a.download=n;document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},60000)}
 // ---------- backup ----------
 async function exportBackup(){const d=await all();dl(new Blob([JSON.stringify({app:'khmerword',v:1,docs:d})],{type:'application/json'}),'khmer-word-backup-'+new Date().toISOString().slice(0,10)+'.json');$('set').open&&$('set').close()}
