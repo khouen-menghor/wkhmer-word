@@ -29,8 +29,10 @@ function paginate(){const d=dims(),per=d.ph+GAP,ch=d.ph-d.mt-d.mb,k=[...P.childr
   if(t+h>end+.5&&(h<=ch||t>=end))pb=(pg+1)*per+d.mt-t;else if(t<pg*per+d.mt-1)pb=pg*per+d.mt-t;
   if(pb>0)e.style.setProperty('--pb',pb+'px');last=Math.max(last,e.offsetTop+e.offsetHeight)});
  const n=Math.max(1,Math.floor((last-1)/per)+1);P.style.height=(n*per-GAP)+'px';zoomApply();$('pgc').textContent='ទំព័រ / Pages: '+n;refreshX()}
-function zoomApply(){const d=dims(),z=(innerWidth<740?(innerWidth-12)/d.pw:1)*($('zm').value/100);P.style.transform='scale('+z+')';$('sheet').style.width=d.pw*z+'px';$('sheet').style.height=P.offsetHeight*z+'px'}
-addEventListener('resize',zoomApply);
+function zoomFactor(){const d=dims();return(innerWidth<740?(innerWidth-12)/d.pw:1)*(+$('zm').value/100)}
+function zoomApply(anchor){const d=dims(),z=zoomFactor(),wrap=$('wrap'),sheet=$('sheet');P.style.transform='scale('+z+')';sheet.style.width=d.pw*z+'px';sheet.style.height=P.offsetHeight*z+'px';
+ if(anchor){const wr=wrap.getBoundingClientRect(),sr=sheet.getBoundingClientRect(),left=sr.left-wr.left+wrap.scrollLeft,top=sr.top-wr.top+wrap.scrollTop;wrap.scrollLeft=left+anchor.x*z-(anchor.clientX-wr.left);wrap.scrollTop=top+anchor.y*z-(anchor.clientY-wr.top)}}
+addEventListener('resize',()=>zoomApply());
 const clean=()=>P.innerHTML.replace(/--pb:[^;"]*;?/g,'').replace(/ style=""/g,'');
 function active(){try{document.querySelectorAll('[data-c]').forEach(b=>{
  const c=b.dataset.c;
@@ -92,11 +94,30 @@ $('idt').onclick=()=>ins(new Date().toLocaleDateString('km-KH'));
 $('ilk').onclick=async()=>{const u=await promptx('តំណភ្ជាប់ (URL)','https://');if(u){restore();document.execCommand('createLink',false,u);dirty()}};
 $('ihd').onclick=()=>{restore();document.execCommand('formatBlock',false,'h1');dirty()};
 document.querySelectorAll('.mg,#or,#pn').forEach(e=>e.onchange=()=>{layout();dirty()});
-function updateZoom(){const z=+$('zm').value;$('zmv').textContent=z+'%';$('zm').setAttribute('aria-valuetext',z+'%');zoomApply()}
+function updateZoom(anchor){const z=+$('zm').value;$('zmv').textContent=z+'%';$('zm').setAttribute('aria-valuetext',z+'%');zoomApply(anchor)}
 function changeZoom(amount){$('zm').value=Math.max(0,Math.min(500,+$('zm').value+amount));updateZoom()}
-$('zm').oninput=updateZoom;
+$('zm').oninput=()=>updateZoom();
 $('zminus').onclick=()=>changeZoom(-10);$('zplus').onclick=()=>changeZoom(10);
 $('zreset').onclick=()=>{$('zm').value=100;updateZoom()};
+let pinch=null;
+const sheet=$('sheet'),wrap=$('wrap');
+sheet.addEventListener('touchstart',e=>{
+ if(e.touches.length!==2||e.target.closest('button,input,select,textarea'))return;
+ const a=e.touches[0],b=e.touches[1],r=sheet.getBoundingClientRect(),distance=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY),z=zoomFactor();
+ if(!distance||!z)return;
+ const clientX=(a.clientX+b.clientX)/2,clientY=(a.clientY+b.clientY)/2;
+ pinch={distance,zoom:Math.max(1,+$('zm').value),x:(clientX-r.left)/z,y:(clientY-r.top)/z,clientX,clientY};
+ e.preventDefault()
+},{passive:false});
+sheet.addEventListener('touchmove',e=>{
+ if(e.touches.length!==2||!pinch)return;
+ e.preventDefault();
+ const a=e.touches[0],b=e.touches[1],distance=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY);
+ $('zm').value=Math.max(1,Math.min(500,Math.round(pinch.zoom*distance/pinch.distance)));
+ updateZoom(pinch)
+},{passive:false});
+sheet.addEventListener('touchend',e=>{if(e.touches.length<2)pinch=null});
+sheet.addEventListener('touchcancel',()=>{pinch=null});
 P.addEventListener('input',dirty);$('dname').addEventListener('input',dirty);$('fn').addEventListener('input',()=>{$('dname').value=$('fn').value;dirty();setTitle()});$('dname').addEventListener('input',setTitle);
 function setTitle(){document.title=(!$('ed').hidden&&$('dname').value.trim())||'Khmer Word'}
 P.addEventListener('paste',e=>{e.preventDefault();const t=e.clipboardData.getData('text/plain');document.execCommand('insertText',false,t)});
@@ -261,12 +282,23 @@ P.addEventListener('load',()=>count(),true);
 const openAI=()=>{$('ai').showModal()};
 const aiChip=t=>{$('aiq').value=t;$('aiq').focus()};
 const aiCopy=async()=>{try{await navigator.clipboard.writeText($('aio').value);toast('បានចម្លង ✓')}catch{$('aio').select()}};
-async function aiGo(){const q=$('aiq').value.trim();if(!q)return;const b=$('aigo');b.disabled=true;b.textContent='កំពុងសរសេរ...';$('aiact').hidden=true;
+async function aiGo(){const q=$('aiq').value.trim();if(!q)return;const b=$('aigo');b.disabled=true;b.textContent='កំពុងសរសេរចូលក្នុងឯកសារ...';$('aiact').hidden=true;
  const ac=new AbortController(),timer=setTimeout(()=>ac.abort(),30000);
- try{const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},signal:ac.signal,body:JSON.stringify({prompt:q,context:(P.innerText||'').slice(-1500),title:$('dname').value})});const j=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(j.error=='not_configured'||r.status==404?'nc':(j.error||'error'));$('aio').value=j.text;$('aiact').hidden=false}
- catch(e){const timed=e.name=='AbortError';info(timed?'AI អស់ពេលឆ្លើយតប':e.message=='nc'?'AI មិនទាន់ត្រូវបានភ្ជាប់':'មិនអាចទាក់ទង AI បានទេ',timed?'សូមព្យាយាមម្ដងទៀត។':e.message=='nc'?'អ្នកគ្រប់គ្រងត្រូវដាក់ API key នៅលើ Vercel (មើល README)។':'សូមពិនិត្យអ៊ីនធឺណិត ហើយព្យាយាមម្តងទៀត។')}
- clearTimeout(timer);b.disabled=false;setIconLabel(b,'sparkle','សរសេរ')}
+ try{
+  const r=await fetch('/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},signal:ac.signal,body:JSON.stringify({prompt:q,context:(P.innerText||'').slice(-1500),title:$('dname').value})}),j=await r.json().catch(()=>({}));
+  if(r.status==404)throw new Error('route_missing');
+  if(j.error=='not_configured')throw new Error('not_configured');
+  if(!r.ok)throw new Error(j.error||'AI request failed');
+  const text=typeof j.text=='string'?j.text.trim():'';
+  if(!text)throw new Error('AI returned an empty response');
+  $('aio').value=text;aiInsert()
+ }catch(e){
+  const timed=e.name=='AbortError',missingKey=e.message=='not_configured',missingRoute=e.message=='route_missing';
+  const title=timed?'AI អស់ពេលឆ្លើយតប':missingKey?'មិនទាន់កំណត់ AI API Key':missingRoute?'រកមិនឃើញ AI API':'មិនអាចប្រើ AI បានទេ';
+  const detail=timed?'សូមព្យាយាមម្ដងទៀត។':missingKey?'បន្ថែម AI_API_KEY នៅក្នុង Vercel → Project Settings → Environment Variables ហើយ Deploy ម្តងទៀត។':missingRoute?'កំណត់ Framework Preset ជា Other ហើយ Deploy ម្តងទៀត។ ប្រសិនបើកំពុងសាកល្បង Local សូមប្រើ Flask server។':e.message||'សូមពិនិត្យអ៊ីនធឺណិត និងការកំណត់ AI រួចព្យាយាមម្ដងទៀត។';
+  info(title,detail)
+ }finally{clearTimeout(timer);b.disabled=false;setIconLabel(b,'sparkle','សរសេរចូលឯកសារ')}
+}
 function aiStyle(){let n=sel&&P.contains(sel.startContainer)?sel.startContainer:(P.lastElementChild||P);const e=n.nodeType==1?n:n.parentElement,cs=getComputedStyle(e);let bl=e;while(bl&&bl!==P&&bl.parentNode!==P)bl=bl.parentNode;const ok=bl&&bl!==P;return{ff:cs.fontFamily,fs:Math.round(parseFloat(cs.fontSize)*.75*2)/2,al:ok?bl.style.textAlign:'',lh:ok?bl.style.lineHeight:'',mb:ok?bl.style.marginBottom:''}}
 function aiNodes(t,st){const f=document.createElement('div');let ul=null;const mk=(x,b)=>{const s=document.createElement('span');s.style.fontFamily=st.ff;s.style.fontSize=st.fs+'pt';if(b)s.style.fontWeight='bold';s.textContent=x.replace(/\*\*/g,'');return s};
  t.split(/\n+/).map(x=>x.trim()).filter(Boolean).forEach(l=>{const li=l.match(/^[-*•]\s+(.*)/);if(li){if(!ul){ul=document.createElement('ul');f.append(ul)}const e=document.createElement('li');e.append(mk(li[1]));ul.append(e);return}ul=null;

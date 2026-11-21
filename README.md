@@ -16,6 +16,7 @@ vendor/docx.js (docx 8.5.0, local), fonts/ (Noto Sans/Serif Khmer, OFL), app.py 
 ## Notes
 - Word export is generated in the browser (works offline).
 - Select an inserted image to resize it with the size buttons or corner handle, crop its edges, move it by selecting **Move** and tapping a new position, or delete it.
+- On a phone, pinch on the document page to zoom the page without enlarging the toolbars.
 - On iPhone/iPad, after PDF generation tap **Share / Save to Files** and select **Save to Files** in the iOS Share sheet. This share action runs directly from the tap, as required by Safari. The alternate **Open / Download PDF** button uses Safari's file handling.
 - Bundled Khmer fonts: Noto Sans/Serif Khmer. Khmer OS fonts, Calibri, Aptos are proprietary and not bundled; to add a font, put a .woff2 in fonts/, add @font-face in style.css, an entry in FONTS (app.js) and the file in sw.js.
 - Fonts are not embedded in the .docx; other devices need the font installed.
@@ -27,7 +28,7 @@ vendor/docx.js (docx 8.5.0, local), fonts/ (Noto Sans/Serif Khmer, OFL), app.py 
 vercel.json sets service-worker headers; .vercelignore keeps the optional Flask files out. Vercel gives HTTPS, so students can "Add to Home Screen" and use it offline.
 
 ## AI writing assistant (✨ AI button)
-Students need no login. The call goes to `api/ai.js` (Vercel serverless function), so your API key is never exposed.
+Students need no login. The call goes to `api/ai.js` (Vercel serverless function), so your API key is never exposed. After you click **Write**, the generated text is inserted at the current cursor position in the document.
 In Vercel → Project → Settings → Environment Variables add:
 - `AI_API_KEY` – your key (free option: Google AI Studio / Gemini key at aistudio.google.com)
 - `AI_PROVIDER` – `gemini` (default), `groq`, `openrouter`, `anthropic` or `openai`
