@@ -202,16 +202,22 @@ const MOB=IOS||/Android/.test(navigator.userAgent);
 const loadJs=s=>(window.__l=window.__l||{})[s]||(window.__l[s]=new Promise((r,j)=>{const e=document.createElement('script');e.src=s;e.onload=r;e.onerror=j;document.head.append(e)}));
 async function pdfImg(){toast('កំពុងបង្កើត PDF...');try{await Promise.all([loadJs('vendor/html2canvas.min.js'),loadJs('vendor/jspdf.umd.min.js'),document.fonts.ready]);
  const d=dims(),per=d.ph+GAP,n=Math.max(1,Math.round((P.offsetHeight+GAP)/per)),o=d.l?'l':'p',pdf=new window.jspdf.jsPDF({orientation:o,unit:'pt',format:'a4',compress:true}),W=pdf.internal.pageSize.getWidth(),H=pdf.internal.pageSize.getHeight();
+ const fonts=new Set();
+ [P,...P.querySelectorAll('*')].forEach(el=>{const s=getComputedStyle(el),family=s.fontFamily.split(',')[0].replace(/["']/g,'').trim(),weight=s.fontWeight;if(family)fonts.add((weight||'400')+' 16px "'+family+'"')});
+ await Promise.all([...fonts].map(req=>document.fonts.load(req,P.textContent).catch(()=>{})));
  for(let k=0;k<n;k++){const host=document.createElement('div');host.style.cssText='position:fixed;left:0;top:0;z-index:5;pointer-events:none;width:'+d.pw+'px;height:'+d.ph+'px;overflow:hidden;background:#fff';
   const cl=P.cloneNode(true);cl.contentEditable='false';cl.spellcheck=false;cl.style.cssText+=';transform:none;position:absolute;left:0;top:'+(-k*per)+'px';host.append(cl);document.body.append(host);
-  const c=await html2canvas(host,{scale:2,backgroundColor:'#fff',logging:false});host.remove();
+  cl.lang='km';cl.dir='ltr';cl.style.textRendering='optimizeLegibility';cl.style.webkitTextSizeAdjust='100%';cl.style.fontKerning='normal';cl.style.fontVariantLigatures='common-ligatures contextual';cl.style.fontFeatureSettings='"liga" 1,"clig" 1,"ccmp" 1,"kern" 1';
+  cl.querySelectorAll('*').forEach(el=>{el.style.textRendering='optimizeLegibility';el.style.webkitTextSizeAdjust='100%';el.style.fontKerning='normal';el.style.fontVariantLigatures='common-ligatures contextual';el.style.fontFeatureSettings='"liga" 1,"clig" 1,"ccmp" 1,"kern" 1'});
+  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+  const c=await html2canvas(host,{scale:IOS?3:2,backgroundColor:'#fff',logging:false,useCORS:true,scrollX:0,scrollY:0,windowWidth:d.pw,windowHeight:d.ph,onclone(doc){const root=doc.body.querySelector('#page');if(root){root.lang='km';root.dir='ltr'}}});host.remove();
   if(k)pdf.addPage('a4',o);pdf.addImage(c.toDataURL('image/png'),'PNG',0,0,W,H);c.width=c.height=0}
  await readyFile(pdf.output('blob'),fname()+'.pdf','PDF')}catch(e){info('មិនអាចបង្កើត PDF បានទេ',e.message)}}
 async function readyFile(blob,name,kind){const f=new File([blob],name,{type:blob.type});
  if(IOS)return iosFileReady(f,name,blob,kind);
  const v=await modal({sheet:1,title:kind+' រួចរាល់ ✓',msg:'«'+name+'»',buttons:[{t:'ចែករំលែក '+kind+' ទៅកាន់ Telegram',i:'share',c:'b share',v:'s'},{t:'រក្សាទុក '+kind+' ក្នុង File',i:'download',c:'b',v:'d'},{t:'បិទ',i:'close',c:'c',v:false}]});
  if(v=='d')return dl(blob,name);if(v!='s')return;
- try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});return}}catch(e){if(e.name=='AbortError')return;info('មិនអាចបើកការចែករំលែកបានទេ',e.message);return}
+ try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f]});return}}catch(e){if(e.name=='AbortError')return;info('មិនអាចបើកការចែករំលែកបានទេ',e.message);return}
  dl(blob,name)}
 function iosFileReady(file,name,blob,kind){
  const d=$('ios');d.className='sheet';d.innerHTML='';
@@ -224,7 +230,7 @@ function iosFileReady(file,name,blob,kind){
  const shareFile=()=>{
   if(!navigator.share||(navigator.canShare&&!navigator.canShare({files:[file]}))){d.close();dl(blob,name);return}
   let task;
-  try{task=navigator.share({files:[file],title:name})}
+  try{task=navigator.share({files:[file]})}
   catch(e){d.close();info('មិនអាចចែករំលែកឯកសារបានទេ',e.message);return}
   d.close();
   Promise.resolve(task).catch(e=>{if(e.name!='AbortError')info('មិនអាចចែករំលែកឯកសារបានទេ','សូមពិនិត្យថា Safari អាចចែករំលែកឯកសារនេះបាន ហើយព្យាយាមម្ដងទៀត។')});
