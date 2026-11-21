@@ -152,7 +152,7 @@ async function mkDocx(){const D=window.docx,p=pageOf(),l=p.or=='l';
  const doc=new D.Document({numbering:{config:[{reference:'num',levels:[{level:0,format:'decimal',text:'%1.',alignment:'left'}]}]},sections:[{properties:{page:{size:{width:11906,height:16838,orientation:l?D.PageOrientation.LANDSCAPE:D.PageOrientation.PORTRAIT},margin:{top:mm(p.mt),bottom:mm(p.mb),left:mm(p.ml),right:mm(p.mr)}}},footers:foot,children:blocks(P,D)}]});
  return D.Packer.toBlob(doc)}
 async function expDocx(){try{await save();const b=await mkDocx();closeAll();MOB?await readyFile(b,fname()+'.docx','Word'):(dl(b,fname()+'.docx'),toast('ទាញយក Word បានជោគជ័យ ✓'))}catch(e){info('មិនអាចទាញយក Word បានទេ',e.message)}}
-async function expPdf(){closeAll();await save();if(MOB)return pdfImg();document.title=fname();setTimeout(()=>print(),200)}
+async function expPdf(){closeAll();await save();if(MOB)return pdfImg();await document.fonts.ready;document.title=fname();setTimeout(()=>print(),200)}
 function dl(b,n){const a=document.createElement('a'),url=URL.createObjectURL(b);a.href=url;a.download=n;document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},60000)}
 // ---------- backup ----------
 async function exportBackup(){const d=await all();dl(new Blob([JSON.stringify({app:'khmerword',v:1,docs:d})],{type:'application/json'}),'khmer-word-backup-'+new Date().toISOString().slice(0,10)+'.json');$('set').open&&$('set').close()}
@@ -203,39 +203,34 @@ const loadJs=s=>(window.__l=window.__l||{})[s]||(window.__l[s]=new Promise((r,j)
 async function pdfImg(){toast('កំពុងបង្កើត PDF...');try{await Promise.all([loadJs('vendor/html2canvas.min.js'),loadJs('vendor/jspdf.umd.min.js'),document.fonts.ready]);
  const d=dims(),per=d.ph+GAP,n=Math.max(1,Math.round((P.offsetHeight+GAP)/per)),o=d.l?'l':'p',pdf=new window.jspdf.jsPDF({orientation:o,unit:'pt',format:'a4',compress:true}),W=pdf.internal.pageSize.getWidth(),H=pdf.internal.pageSize.getHeight();
  for(let k=0;k<n;k++){const host=document.createElement('div');host.style.cssText='position:fixed;left:0;top:0;z-index:5;pointer-events:none;width:'+d.pw+'px;height:'+d.ph+'px;overflow:hidden;background:#fff';
-  const cl=P.cloneNode(true);cl.contentEditable='false';cl.style.cssText+=';transform:none;position:absolute;left:0;top:'+(-k*per)+'px';host.append(cl);document.body.append(host);
+  const cl=P.cloneNode(true);cl.contentEditable='false';cl.spellcheck=false;cl.style.cssText+=';transform:none;position:absolute;left:0;top:'+(-k*per)+'px';host.append(cl);document.body.append(host);
   const c=await html2canvas(host,{scale:2,backgroundColor:'#fff',logging:false});host.remove();
-  if(k)pdf.addPage('a4',o);pdf.addImage(c.toDataURL('image/jpeg',.92),'JPEG',0,0,W,H);c.width=c.height=0}
+  if(k)pdf.addPage('a4',o);pdf.addImage(c.toDataURL('image/png'),'PNG',0,0,W,H);c.width=c.height=0}
  await readyFile(pdf.output('blob'),fname()+'.pdf','PDF')}catch(e){info('មិនអាចបង្កើត PDF បានទេ',e.message)}}
 async function readyFile(blob,name,kind){const f=new File([blob],name,{type:blob.type});
- if(IOS&&kind=='PDF')return iosPdfReady(f,name,blob);
- if(IOS&&kind!='PDF'){
-  try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});return}}catch(e){if(e.name=='AbortError')return}
-  dl(blob,name);return
- }
- const msgText=IOS&&kind=='PDF'?'ចុច «ចែករំលែក / រក្សាទុក PDF» រួចជ្រើស Save to Files ដើម្បីរក្សាទុក ឬ Telegram ដើម្បីផ្ញើ។':'«'+name+'»';
- const shareLabel=IOS&&kind=='PDF'?'ចែករំលែក / រក្សាទុក PDF':'ចែករំលែក (Telegram ...)';
- const v=await modal({sheet:1,title:kind+' រួចរាល់ ✓',msg:msgText,buttons:[{t:shareLabel,i:'share',c:'b share',v:'s'},{t:'រក្សាទុកក្នុងទូរស័ព្ទ',i:'download',c:'b',v:'d'},{t:'បិទ',i:'close',c:'c',v:false}]});
+ if(IOS)return iosFileReady(f,name,blob,kind);
+ const v=await modal({sheet:1,title:kind+' រួចរាល់ ✓',msg:'«'+name+'»',buttons:[{t:'ចែករំលែក '+kind+' ទៅកាន់ Telegram',i:'share',c:'b share',v:'s'},{t:'រក្សាទុក '+kind+' ក្នុង File',i:'download',c:'b',v:'d'},{t:'បិទ',i:'close',c:'c',v:false}]});
  if(v=='d')return dl(blob,name);if(v!='s')return;
  try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});return}}catch(e){if(e.name=='AbortError')return;info('មិនអាចបើកការចែករំលែកបានទេ',e.message);return}
  dl(blob,name)}
-function iosPdfReady(file,name,blob){
+function iosFileReady(file,name,blob,kind){
  const d=$('ios');d.className='sheet';d.innerHTML='';
  const box=document.createElement('div');box.className='mb';
- const title=document.createElement('b');title.textContent='PDF រួចរាល់';
- const text=document.createElement('p');text.textContent='ចុចប៊ូតុងខាងក្រោម រួចជ្រើស “Save to Files” ក្នុងផ្ទាំងចែករំលែករបស់ iPhone។';
+ const title=document.createElement('b');title.textContent=kind+' រួចរាល់';
+ const text=document.createElement('p');text.textContent='ជ្រើស Telegram ដើម្បីចែករំលែក ឬ Save to Files ដើម្បីរក្សាទុក។';
  box.append(title,text);
  const buttons=document.createElement('div');buttons.className='mbt';
- const share=document.createElement('button');share.className='b';setIconLabel(share,'share','ចែករំលែក / រក្សាទុកក្នុង Files');
- share.onclick=()=>{
+ const share=document.createElement('button');share.className='b';setIconLabel(share,'share','ចែករំលែក '+kind+' ទៅកាន់ Telegram');
+ const shareFile=()=>{
   if(!navigator.share||(navigator.canShare&&!navigator.canShare({files:[file]}))){d.close();dl(blob,name);return}
   let task;
   try{task=navigator.share({files:[file],title:name})}
-  catch(e){d.close();info('មិនអាចចែករំលែក PDF បានទេ',e.message);return}
+  catch(e){d.close();info('មិនអាចចែករំលែកឯកសារបានទេ',e.message);return}
   d.close();
-  Promise.resolve(task).catch(e=>{if(e.name!='AbortError')info('មិនអាចចែករំលែក PDF បានទេ','សូមពិនិត្យថា Safari អាចចែករំលែកឯកសារ PDF បាន ហើយព្យាយាមម្ដងទៀត។')});
+  Promise.resolve(task).catch(e=>{if(e.name!='AbortError')info('មិនអាចចែករំលែកឯកសារបានទេ','សូមពិនិត្យថា Safari អាចចែករំលែកឯកសារនេះបាន ហើយព្យាយាមម្ដងទៀត។')});
  };
- const download=document.createElement('button');setIconLabel(download,'download','បើក / ទាញយក PDF');download.onclick=()=>{d.close();dl(blob,name)};
+ share.onclick=shareFile;
+ const download=document.createElement('button');setIconLabel(download,'download','រក្សាទុក '+kind+' ក្នុង File');download.onclick=shareFile;
  const close=document.createElement('button');close.className='c';setIconLabel(close,'close','បិទ');close.onclick=()=>d.close();
  buttons.append(share,download,close);d.append(box,buttons);d.showModal();
 }
